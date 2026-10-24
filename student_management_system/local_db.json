@@ -1,0 +1,124 @@
+[
+  {
+    "student_id": "STU-1001",
+    "first_name": "Aarav",
+    "last_name": "Sharma",
+    "email": "aarav.sharma@university.edu",
+    "phone": "+1-555-0101",
+    "department": "Computer Science",
+    "year": "3rd Year",
+    "gpa": 3.88,
+    "status": "Active",
+    "enrollment_date": "2022-08-15",
+    "courses": [
+      "Cloud Computing",
+      "Data Structures",
+      "Operating Systems"
+    ],
+    "created_at": "2024-01-15T08:30:00Z",
+    "updated_at": "2024-01-15T08:30:00Z"
+  },
+  {
+    "student_id": "STU-1002",
+    "first_name": "Sophia",
+    "last_name": "Chen",
+    "email": "sophia.chen@university.edu",
+    "phone": "+1-555-0102",
+    "department": "Electrical Engineering",
+    "year": "4th Year",
+    "gpa": 3.92,
+    "status": "Active",
+    "enrollment_date": "2021-08-20",
+    "courses": [
+      "Signals & Systems",
+      "Digital Circuits",
+      "Embedded Systems"
+    ],
+    "created_at": "2024-01-16T09:15:00Z",
+    "updated_at": "2024-01-16T09:15:00Z"
+  },
+  {
+    "student_id": "STU-1003",
+    "first_name": "Marcus",
+    "last_name": "Johnson",
+    "email": "marcus.j@university.edu",
+    "phone": "+1-555-0103",
+    "department": "Mechanical Engineering",
+    "year": "2nd Year",
+    "gpa": 3.45,
+    "status": "Active",
+    "enrollment_date": "2023-08-18",
+    "courses": [
+      "Thermodynamics",
+      "Statics",
+      "CAD Design"
+    ],
+    "created_at": "2024-01-17T11:00:00Z",
+    "updated_at": "2024-01-17T11:00:00Z"
+  },
+  {
+    "student_id": "STU-1004",
+    "first_name": "Ananya",
+    "last_name": "Patel",
+    "email": "ananya.patel@university.edu",
+    "phone": "+1-555-0104",
+    "department": "Data Science",
+    "year": "3rd Year",
+    "gpa": 3.75,
+    "status": "Active",
+    "enrollment_date": "2022-08-15",
+    "courses": [
+      "Machine Learning",
+      "Data Mining",
+      "Applied Statistics"
+    ],
+    "created_at": "2024-01-18T14:20:00Z",
+    "updated_at": "2024-01-18T14:20:00Z"
+  },
+  {
+    "student_id": "STU-1005",
+    "first_name": "Liam",
+    "last_name": "Smith",
+    "email": "liam.smith@university.edu",
+    "phone": "+1-555-0105",
+    "department": "Business Administration",
+    "year": "4th Year",
+    "gpa": 3.6,
+    "status": "Graduated",
+    "enrollment_date": "2020-08-24",
+    "courses": [
+      "Corporate Finance",
+      "Strategic Management",
+      "Marketing Principles"
+    ],
+    "created_at": "2024-01-19T10:45:00Z",
+    "updated_at": "2024-01-19T10:45:00Z"
+  },
+  {
+    "student_id": "STU-1006",
+    "first_name": "Elena",
+    "last_name": "Rostova",
+    "email": "elena.r@university.edu",
+    "phone": "+1-555-0106",
+    "department": "Computer Science",
+    "year": "1st Year",
+    "gpa": 3.95,
+    "status": "Active",
+    "enrollment_date": "2024-08-22",
+    "courses": [
+      "Intro to Programming",
+      "Calculus I",
+      "Computer Architecture"
+    ],
+    "created_at": "2024-08-25T09:00:00Z",
+    "updated_at": "2024-08-25T09:00:00Z"
+  },
+  {
+    "student_id": "STU-8888",
+    "first_name": "Test",
+    "last_name": "Person",
+    "email": "test@edu.org",
+    "department": "Computer Science",
+    "gpa": 3.9
+  }
+]

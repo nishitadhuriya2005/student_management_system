@@ -1,0 +1,4 @@
+# Optional dependencies for AWS Deployment
+# AWS Lambda runtime includes boto3 by default.
+# For running `python3 aws/deploy.py` locally from your terminal, install boto3:
+boto3>=1.28.0

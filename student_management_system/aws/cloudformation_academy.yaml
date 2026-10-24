@@ -1,0 +1,273 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Student Management System - AWS Academy Learner Lab Version
+  Configured to use AWS Academy pre-created 'LabRole' for zero permission errors.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    Description: Environment stage name
+
+Resources:
+  # -------------------------------------------------------------
+  # 1. Amazon DynamoDB Table
+  # -------------------------------------------------------------
+  StudentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'StudentManagementTable-${EnvironmentName}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: student_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: student_id
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: StudentManagementSystem
+
+  # -------------------------------------------------------------
+  # 2. AWS Lambda Function (Uses AWS Academy LabRole)
+  # -------------------------------------------------------------
+  StudentApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'StudentManagementApi-${EnvironmentName}'
+      Handler: index.lambda_handler
+      Runtime: python3.11
+      Timeout: 15
+      MemorySize: 256
+      # Uses the pre-created LabRole provided by AWS Academy
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref StudentsTable
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import decimal
+          from datetime import datetime, timezone
+          import boto3
+          from boto3.dynamodb.conditions import Key, Attr
+
+          class DecimalEncoder(json.JSONEncoder):
+              def default(self, obj):
+                  if isinstance(obj, decimal.Decimal):
+                      return int(obj) if obj % 1 == 0 else float(obj)
+                  return super(DecimalEncoder, self).default(obj)
+
+          def float_to_decimal(obj):
+              if isinstance(obj, float):
+                  return decimal.Decimal(str(obj))
+              if isinstance(obj, dict):
+                  return {k: float_to_decimal(v) for k, v in obj.items()}
+              if isinstance(obj, list):
+                  return [float_to_decimal(v) for v in obj]
+              return obj
+
+          TABLE_NAME = os.environ.get('TABLE_NAME', 'StudentManagementTable-dev')
+          REGION = os.environ.get('AWS_REGION', 'us-east-1')
+          dynamodb = boto3.resource('dynamodb', region_name=REGION)
+          table = dynamodb.Table(TABLE_NAME)
+
+          CORS_HEADERS = {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+          }
+
+          def build_response(status_code, body):
+              return {
+                  'statusCode': status_code,
+                  'headers': CORS_HEADERS,
+                  'body': json.dumps(body, cls=DecimalEncoder)
+              }
+
+          def parse_body(event):
+              body = event.get('body')
+              if not body: return {}
+              if isinstance(body, dict): return body
+              try: return json.loads(body)
+              except Exception: return {}
+
+          def extract_path_and_method(event):
+              http_context = event.get('requestContext', {}).get('http', {})
+              method = http_context.get('method') or event.get('httpMethod', 'GET')
+              path = http_context.get('path') or event.get('path', '/')
+              return method.upper(), path
+
+          def lambda_handler(event, context):
+              method, path = extract_path_and_method(event)
+              if method == 'OPTIONS':
+                  return build_response(200, {'message': 'CORS preflight successful'})
+
+              clean_path = path.rstrip('/')
+              parts = [p for p in clean_path.split('/') if p]
+              query = event.get('queryStringParameters') or {}
+
+              try:
+                  if path.endswith('/analytics') or path.endswith('/stats'):
+                      res = table.scan()
+                      items = res.get('Items', [])
+                      total = len(items)
+                      total_gpa, valid_gpa = 0.0, 0
+                      depts, stats, years = {}, {}, {}
+                      for s in items:
+                          try:
+                              g = float(s.get('gpa', 0))
+                              if g > 0: total_gpa += g; valid_gpa += 1
+                          except: pass
+                          d = s.get('department', 'Unknown'); depts[d] = depts.get(d, 0) + 1
+                          st = s.get('status', 'Active'); stats[st] = stats.get(st, 0) + 1
+                          yr = s.get('year', 'Unknown'); years[yr] = years.get(yr, 0) + 1
+                      return build_response(200, {
+                          'total_students': total,
+                          'average_gpa': round(total_gpa / valid_gpa, 2) if valid_gpa else 0.0,
+                          'departments': depts,
+                          'status_breakdown': stats,
+                          'year_breakdown': years
+                      })
+
+                  if path.endswith('/seed'):
+                      samples = [
+                          {"student_id": "STU-1001", "first_name": "Aarav", "last_name": "Sharma", "email": "aarav@edu.org", "department": "Computer Science", "year": "3rd Year", "gpa": 3.88, "status": "Active", "courses": ["Cloud Computing", "OS"]},
+                          {"student_id": "STU-1002", "first_name": "Sophia", "last_name": "Chen", "email": "sophia@edu.org", "department": "Electrical Engineering", "year": "4th Year", "gpa": 3.92, "status": "Active", "courses": ["Embedded Systems"]},
+                          {"student_id": "STU-1003", "first_name": "Marcus", "last_name": "Johnson", "email": "marcus@edu.org", "department": "Mechanical Engineering", "year": "2nd Year", "gpa": 3.45, "status": "Active", "courses": ["CAD", "Thermodynamics"]},
+                          {"student_id": "STU-1004", "first_name": "Ananya", "last_name": "Patel", "email": "ananya@edu.org", "department": "Data Science", "year": "3rd Year", "gpa": 3.75, "status": "Active", "courses": ["Machine Learning", "Stats"]}
+                      ]
+                      now = datetime.now(timezone.utc).isoformat()
+                      for s in samples:
+                          if not table.get_item(Key={'student_id': s['student_id']}).get('Item'):
+                              item = s.copy()
+                              item['gpa'] = float_to_decimal(item['gpa'])
+                              item['created_at'] = now
+                              item['updated_at'] = now
+                              table.put_item(Item=item)
+                      return build_response(200, {'message': f'Seeded {len(samples)} records.'})
+
+                  if len(parts) >= 2 and parts[-2] == 'students':
+                      sid = parts[-1]
+                      if method == 'GET':
+                          item = table.get_item(Key={'student_id': sid}).get('Item')
+                          return build_response(200, {'student': item}) if item else build_response(404, {'error': 'Not found'})
+                      elif method == 'PUT':
+                          body = parse_body(event)
+                          now = datetime.now(timezone.utc).isoformat()
+                          fields = ['first_name', 'last_name', 'email', 'phone', 'department', 'year', 'gpa', 'status', 'enrollment_date', 'courses']
+                          update_parts = ['#updated_at = :updated_at']
+                          names = {'#updated_at': 'updated_at'}
+                          values = {':updated_at': now}
+                          for f in fields:
+                              if f in body:
+                                  val = float_to_decimal(float(body[f])) if f == 'gpa' else body[f]
+                                  names[f'#{f}'] = f; values[f':{f}'] = val
+                                  update_parts.append(f'#{f} = :{f}')
+                          res = table.update_item(Key={'student_id': sid}, UpdateExpression='SET ' + ', '.join(update_parts), ExpressionAttributeNames=names, ExpressionAttributeValues=values, ReturnValues='ALL_NEW')
+                          return build_response(200, {'message': 'Updated', 'student': res.get('Attributes')})
+                      elif method == 'DELETE':
+                          table.delete_item(Key={'student_id': sid})
+                          return build_response(200, {'message': f'Deleted {sid}'})
+
+                  if len(parts) >= 1 and parts[-1] == 'students':
+                      if method == 'GET':
+                          res = table.scan()
+                          items = res.get('Items', [])
+                          dept = query.get('department')
+                          status = query.get('status')
+                          search = query.get('search', '').lower().strip()
+                          if dept and dept != 'All': items = [s for s in items if s.get('department') == dept]
+                          if status and status != 'All': items = [s for s in items if s.get('status') == status]
+                          if search: items = [s for s in items if search in s.get('first_name','').lower() or search in s.get('last_name','').lower() or search in s.get('student_id','').lower()]
+                          items.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+                          return build_response(200, {'count': len(items), 'students': items})
+                      elif method == 'POST':
+                          body = parse_body(event)
+                          sid = str(body.get('student_id', '')).strip()
+                          if not sid: return build_response(400, {'error': 'student_id required'})
+                          now = datetime.now(timezone.utc).isoformat()
+                          new_s = {
+                              'student_id': sid,
+                              'first_name': str(body.get('first_name', '')).strip(),
+                              'last_name': str(body.get('last_name', '')).strip(),
+                              'email': str(body.get('email', '')).strip().lower(),
+                              'phone': str(body.get('phone', '')).strip(),
+                              'department': str(body.get('department', 'Computer Science')).strip(),
+                              'year': str(body.get('year', '1st Year')).strip(),
+                              'gpa': float_to_decimal(float(body.get('gpa', 0.0))),
+                              'status': str(body.get('status', 'Active')).strip(),
+                              'enrollment_date': str(body.get('enrollment_date', now[:10])),
+                              'courses': body.get('courses', []),
+                              'created_at': now,
+                              'updated_at': now
+                          }
+                          table.put_item(Item=new_s)
+                          return build_response(201, {'message': 'Created', 'student': new_s})
+
+                  return build_response(200, {'service': 'Student Management API', 'status': 'healthy'})
+              except Exception as e:
+                  return build_response(500, {'error': str(e)})
+
+  # -------------------------------------------------------------
+  # 3. Amazon API Gateway HTTP API (v2)
+  # -------------------------------------------------------------
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub 'StudentManagementHttpApi-${EnvironmentName}'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Requested-With
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt StudentApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: '$default'
+      Target: !Sub 'integrations/${HttpApiIntegration}'
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  LambdaPermissionForHttpApi:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StudentApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+Outputs:
+  ApiEndpointUrl:
+    Description: HTTP API Gateway Invoke URL for your Frontend Dashboard
+    Value: !GetAtt HttpApi.ApiEndpoint
+
+  DynamoDBTableName:
+    Description: DynamoDB Table Name
+    Value: !Ref StudentsTable

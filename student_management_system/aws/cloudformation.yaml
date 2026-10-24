@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Student Management System - 100% AWS Free Tier Serverless Architecture
+  Includes Amazon DynamoDB, AWS Lambda (Python), and Amazon API Gateway HTTP API.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    Description: Environment stage name
+
+Resources:
+  # -------------------------------------------------------------
+  # 1. Amazon DynamoDB Table (Always Free Tier: up to 25 GB)
+  # -------------------------------------------------------------
+  StudentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'StudentManagementTable-${EnvironmentName}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: student_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: student_id
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: StudentManagementSystem
+
+  # -------------------------------------------------------------
+  # 2. IAM Role for AWS Lambda
+  # -------------------------------------------------------------
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'StudentManagementLambdaRole-${EnvironmentName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource: !GetAtt StudentsTable.Arn
+
+  # -------------------------------------------------------------
+  # 3. AWS Lambda Function (Serverless Backend)
+  # -------------------------------------------------------------
+  StudentApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'StudentManagementApi-${EnvironmentName}'
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.11
+      Timeout: 15
+      MemorySize: 256
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref StudentsTable
+      Code:
+        ZipFile: |
+          # Placeholder code. Replace by uploading backend/lambda_function.py
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'headers': {'Access-Control-Allow-Origin': '*'},
+                  'body': json.dumps({'message': 'Student Management System API is live!'})
+              }
+
+  # -------------------------------------------------------------
+  # 4. Amazon API Gateway HTTP API (Lightweight, High Free Quota)
+  # -------------------------------------------------------------
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub 'StudentManagementHttpApi-${EnvironmentName}'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Requested-With
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt StudentApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: '$default'
+      Target: !Sub 'integrations/${HttpApiIntegration}'
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  LambdaPermissionForHttpApi:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StudentApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+Outputs:
+  ApiEndpointUrl:
+    Description: HTTP API Gateway Invoke URL for the frontend
+    Value: !GetAtt HttpApi.ApiEndpoint
+
+  DynamoDBTableName:
+    Description: DynamoDB Table Name
+    Value: !Ref StudentsTable
+
+  LambdaFunctionName:
+    Description: Lambda Function Name
+    Value: !Ref StudentApiFunction
